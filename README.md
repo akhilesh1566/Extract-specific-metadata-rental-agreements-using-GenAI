@@ -1,0 +1,1 @@
+# Extract-specific-metadata-rental-agreements-using-GenAI
