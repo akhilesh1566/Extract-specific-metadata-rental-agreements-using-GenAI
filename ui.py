@@ -33,6 +33,11 @@ def display_text_preview(text):
         st.warning("No text could be extracted or displayed.")
     st.markdown("---")
 
+def display_process_button():
+    """Displays the button to trigger document indexing. Returns True if clicked."""
+    if st.button("📊 Process & Index Document"):
+        return True
+    return False
 
 def display_extract_button():
     """Displays the button to trigger metadata extraction. Returns True if clicked."""

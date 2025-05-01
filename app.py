@@ -1,18 +1,21 @@
+# app.py
+
 import streamlit as st
 import os
 from dotenv import load_dotenv
 
-# Import UI functions and potentially agent/utils later
+# Import UI functions
 import ui
-# import pdf_utils # Will be needed in Phase 2
-# from agents import RentalAgreementAgent # Will be needed in Phase 3
+# Import the PDF utility function
+import pdf_utils
+# --- Import the Agent ---
+from agents import RentalAgreementAgent
 
 # --- Load Environment Variables ---
 load_dotenv()
-# Example of how to get the key (will be used in Phase 3)
-# google_api_key = os.getenv("GOOGLE_API_KEY")
+google_api_key = os.getenv("GOOGLE_API_KEY")
 
-# --- Page Configuration (MUST be the first Streamlit command) ---
+# --- Page Configuration ---
 st.set_page_config(
     page_title="Rental Agreement Extractor",
     page_icon="📄",
@@ -20,90 +23,149 @@ st.set_page_config(
 )
 
 # --- Initialize Session State ---
-# This will hold data across reruns
+# Ensure keys exist
 if 'uploaded_filename' not in st.session_state:
     st.session_state.uploaded_filename = None
 if 'extracted_text' not in st.session_state:
     st.session_state.extracted_text = None
+if 'agent' not in st.session_state: # Add agent to session state
+    st.session_state.agent = None
 if 'rag_index_ready' not in st.session_state:
     st.session_state.rag_index_ready = False
 if 'extracted_metadata' not in st.session_state:
     st.session_state.extracted_metadata = None
 if 'processing_error' not in st.session_state:
     st.session_state.processing_error = None
-# Add 'agent' to session state later in Phase 3
+
+
+# --- Initialize Agent ---
+# Try to initialize the agent once when the app loads if API key is available
+# This prevents re-initialization on every rerun unless necessary
+# Note: Secrets management might require initialization inside main() if key is dynamic
+def initialize_agent():
+    """Initializes the agent and stores it in session state."""
+    if st.session_state.agent is None:
+        if not google_api_key:
+            st.error("⚠️ Google API Key not found. Please set the GOOGLE_API_KEY environment variable or in .env file.")
+            st.stop() # Stop execution if no key
+        try:
+            st.session_state.agent = RentalAgreementAgent(api_key=google_api_key)
+        except Exception as e:
+            st.error(f"🚨 Failed to initialize AI Agent: {e}")
+            st.session_state.agent = None # Ensure agent is None if init fails
+            st.stop()
 
 
 # --- Main Application Logic ---
 def main():
+    initialize_agent() # Attempt agent initialization
+
+    # Stop if agent failed to initialize
+    if st.session_state.agent is None:
+        return # Error messages handled in initialize_agent
+
     # --- Render Header ---
     ui.display_header()
 
     # --- Step 1: Upload Area ---
     uploaded_file = ui.display_upload_area()
 
-    # --- Step 2 (Placeholder): Process Upload & Extract Text ---
+    # --- Step 2: Process Upload & Extract Text ---
     if uploaded_file:
-        # Basic check if it's a new file
-        if uploaded_file.name != st.session_state.uploaded_filename:
+        if uploaded_file.name != st.session_state.get('uploaded_filename', None):
+            print(f"New file uploaded: {uploaded_file.name}")
             st.session_state.uploaded_filename = uploaded_file.name
-            st.session_state.extracted_text = None # Reset state for new file
+            # Reset dependent states
+            st.session_state.extracted_text = None
             st.session_state.rag_index_ready = False
             st.session_state.extracted_metadata = None
             st.session_state.processing_error = None
-            ui.display_processing_message(f"Processing '{uploaded_file.name}'...")
-            # --- Call Phase 2 logic here (Text Extraction) ---
-            # Placeholder: In Phase 2, call pdf_utils and update session state
-            st.session_state.extracted_text = f"Placeholder: Text for '{uploaded_file.name}' would be extracted here." # Replace in Phase 2
-            if st.session_state.extracted_text:
-                 ui.display_processing_message("Text extracted.")
-            else:
-                 ui.display_processing_message("Text extraction failed.")
-                 st.session_state.processing_error = "Text extraction failed."
 
+            with st.spinner(f"Extracting text from '{uploaded_file.name}'..."):
+                try:
+                    extracted_text_result = pdf_utils.extract_text_from_pdf(uploaded_file)
+                    if extracted_text_result:
+                        st.session_state.extracted_text = extracted_text_result
+                        print("Text extraction successful.")
+                    else:
+                        st.session_state.processing_error = f"Could not extract text from '{uploaded_file.name}'."
+                        st.session_state.extracted_text = None
+                        print(f"Text extraction failed for {uploaded_file.name}")
+                except Exception as e:
+                    st.session_state.processing_error = f"An unexpected error occurred during text extraction: {str(e)}"
+                    st.session_state.extracted_text = None
+                    print(f"Unexpected error in app.py calling extraction: {e}")
 
-        # --- Display Text Preview (if extracted) ---
-        if st.session_state.extracted_text:
-            ui.display_text_preview(st.session_state.extracted_text)
-        elif st.session_state.processing_error:
-             st.error(st.session_state.processing_error)
+    # --- Display Status/Preview/Buttons based on Session State ---
+    if st.session_state.get('processing_error', None):
+        st.error(st.session_state.processing_error)
 
+    elif st.session_state.get('extracted_text', None):
+        ui.display_processing_message("Text extraction complete.")
+        ui.display_text_preview(st.session_state.extracted_text)
 
-        # --- Step 3 & 4 (Placeholder): Process Document & Extract Metadata ---
-        if st.session_state.extracted_text: # Only proceed if text is available
-             # --- Placeholder: Indexing (Phase 3) ---
-             # Add logic here later: If not indexed -> button "Create Index" -> call agent.load_and_index... -> update rag_index_ready
-             st.session_state.rag_index_ready = True # Assume ready for now
+        # --- Step 3: Process & Index Document ---
+        if not st.session_state.get('rag_index_ready', False):
+            # Show the "Process" button only if text is ready and index isn't
+            if ui.display_process_button(): # Use the new UI function
+                with st.spinner("Processing document: Chunking, Embedding, Indexing... (This may take a moment)"):
+                    agent = st.session_state.agent # Get agent from session state
+                    if agent:
+                        try:
+                            success = agent.load_and_index_document(st.session_state.extracted_text)
+                            if success:
+                                st.session_state.rag_index_ready = True
+                                print("Indexing successful, RAG is ready.")
+                                # Use experimental_rerun to immediately reflect the state change
+                                st.rerun() # Rerun to hide "Process" button and show "Extract" button section
+                            else:
+                                st.session_state.processing_error = "Failed to process and index the document."
+                                st.session_state.rag_index_ready = False
+                                st.error(st.session_state.processing_error) # Show error immediately
+                        except Exception as e:
+                            st.session_state.processing_error = f"Error during document processing: {str(e)}"
+                            st.session_state.rag_index_ready = False
+                            st.error(st.session_state.processing_error) # Show error immediately
+                            print(f"Error calling load_and_index_document: {e}")
+                    else:
+                         st.error("Agent not initialized. Cannot process document.")
 
-             if st.session_state.rag_index_ready:
-                # --- Extraction Button (Phase 5) ---
-                if ui.display_extract_button():
+        # --- Step 4 & 5: Extract Metadata & Display ---
+        # Show extraction button only if RAG index is ready
+        if st.session_state.get('rag_index_ready', False):
+            # Display the "Extract Metadata" button
+            if ui.display_extract_button():
+                agent = st.session_state.agent
+                if agent:
                     ui.display_processing_message("Extracting metadata...")
                     with st.spinner("AI is analyzing the document..."):
-                        # --- Call Phase 4 logic here (Metadata Extraction) ---
-                        # Placeholder: In Phase 5, call agent.extract_metadata()
-                        st.session_state.extracted_metadata = { # Replace with actual call
-                            "Agreement Value": "$1500/month (Placeholder)",
-                            "Agreement Start Date": "2024-01-01 (Placeholder)",
-                            "Agreement End Date": "2024-12-31 (Placeholder)",
-                            "Renewal Notice (Days)": "60 (Placeholder)",
-                            "Party One": "Jane Doe (Placeholder)",
-                            "Party Two": "Landlord Corp (Placeholder)"
-                        }
-                        if st.session_state.extracted_metadata:
-                            ui.display_processing_message("Metadata extraction complete.")
-                        else:
-                            ui.display_processing_message("Metadata extraction failed.")
-                            st.session_state.processing_error = "Metadata extraction failed."
-             else:
-                 ui.display_processing_message("Document needs to be processed (indexed) first.")
+                         try:
+                            metadata_result = agent.extract_metadata() # Call Phase 4 logic
+                            st.session_state.extracted_metadata = metadata_result
+                            if metadata_result:
+                                ui.display_processing_message("Metadata extraction complete.")
+                            else:
+                                st.session_state.processing_error = "Metadata extraction failed or returned no results."
+                                st.warning(st.session_state.processing_error) # Use warning for failed extraction
+                         except Exception as e:
+                             st.session_state.processing_error = f"Error during metadata extraction: {str(e)}"
+                             st.session_state.extracted_metadata = None # Clear previous results on error
+                             st.error(st.session_state.processing_error)
+                             print(f"Error calling extract_metadata: {e}")
+                else:
+                     st.error("Agent not available for extraction.")
 
-    # --- Step 5 (Placeholder): Display Results Table ---
-    # Display metadata only if it exists in session state
-    if st.session_state.extracted_metadata:
-        ui.display_metadata_table(st.session_state.extracted_metadata)
+            # Display metadata table if extraction was successful and results exist
+            if st.session_state.get('extracted_metadata'):
+                ui.display_metadata_table(st.session_state.extracted_metadata)
+            # Display processing error related to extraction if it occurred
+            elif st.session_state.get('processing_error') and "extraction" in st.session_state.processing_error.lower():
+                 st.warning(st.session_state.processing_error) # Use warning if extraction specifically failed
+
+
+    # Show initial prompt if no file is uploaded
     elif not uploaded_file:
-         st.info("Upload a PDF agreement to start.")
+        st.info("Upload a PDF rental agreement to start the process.")
 
 
 # --- Run the main function ---
