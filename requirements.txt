@@ -1,0 +1,28 @@
+# Core Frameworks & Libraries
+streamlit
+langchain
+langchain-core
+langchain-community
+pydantic
+
+# LLM and Embeddings (Google Gemini)
+google-generativeai
+langchain-google-genai
+
+# Vector Store
+faiss-cpu
+
+# PDF Processing
+pypdf2
+# OR (Choose ONE PDF library)
+# pymupdf
+
+# Utilities
+python-dotenv
+tiktoken
+
+# Optional (Install if/when needed)
+regex
+tenacity
+pytesseract
+opencv-python-headless  # Corrected typo, no version specified initially
