@@ -5,6 +5,6 @@ conda activate renenv
 
 pip install - r requirements.txt
 
-run you project
+run the project:
 
 streamlit run app.py
