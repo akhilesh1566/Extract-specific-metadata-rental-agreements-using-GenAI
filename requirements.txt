@@ -11,18 +11,20 @@ langchain-google-genai
 
 # Vector Store
 faiss-cpu
-
+python-docx
 # PDF Processing
 pypdf2
 # OR (Choose ONE PDF library)
-# pymupdf
-
+pymupdf
+Pillow
 # Utilities
 python-dotenv
 tiktoken
-
+pytesseract
 # Optional (Install if/when needed)
 regex
 tenacity
 pytesseract
-opencv-python-headless  # Corrected typo, no version specified initially
+opencv-python-headless 
+xlsxwriter # Corrected typo, no version specified initially
+langdetect
