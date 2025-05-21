@@ -8,3 +8,5 @@ pip install - r requirements.txt
 run the project:
 
 streamlit run app.py
+
+fun
