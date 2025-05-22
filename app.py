@@ -7,13 +7,16 @@ import pdf_utils
 from agents import RentalAgreementAgent
 import time
 
+
 print("-" * 20)
 print(f"Imported pdf_utils: {pdf_utils}")
 print(f"Path to imported pdf_utils: {pdf_utils.__file__}")
 print("Attributes available in pdf_utils:")
 print(dir(pdf_utils)) # List everything defined in the imported module
 print("-" * 20)
+
 load_dotenv()
+
 
 google_api_key = os.getenv("GOOGLE_API_KEY")
 

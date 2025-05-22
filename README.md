@@ -3,7 +3,7 @@ conda create -n renenv python==3.11- y
 
 conda activate renenv
 
-pip install - r requirements.txt
+pip install -r requirements.txt
 
 run the project:
 
